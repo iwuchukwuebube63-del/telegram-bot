@@ -271,13 +271,6 @@ if __name__ == "__main__":
             filters=filters.ChatType.PRIVATE
         )
     )
-    app.add_handler(
-        CommandHandler(
-            "getid",
-            getid,
-            filters=filters.ChatType.PRIVATE
-        )
-    )
 
     app.add_handler(
         MessageHandler(
