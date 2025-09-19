@@ -253,5 +253,5 @@ if __name__ == "__main__":
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     print("Bot is running...")
-threading.Thread(target=run_http_server, daemon=True).start()
+    threading.Thread(target=run_http_server, daemon=True).start()
     app.run_polling()
