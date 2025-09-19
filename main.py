@@ -5,6 +5,7 @@ import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
+from telegram.ext import filters
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -242,15 +243,48 @@ threading.Thread(target=run_http_server, daemon=True).start()
 if __name__ == "__main__":
     app = ApplicationBuilder().token(TOKEN).build()
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("help", help_command))
-    app.add_handler(CommandHandler("myid", myid))
-    app.add_handler(CommandHandler("generate", generate_code))
-    app.add_handler(CommandHandler("getlink", getlink))
-    app.add_handler(CommandHandler("list_users", list_users))
-    app.add_handler(CommandHandler("revoke", revoke_user))
-    app.add_handler(CommandHandler("broadcast", broadcast))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    app.add_handler(
+        CommandHandler(
+            "start",
+            start,
+            filters=filters.ChatType.PRIVATE
+        )
+    )
+    app.add_handler(
+        CommandHandler(
+            "help",
+            help_command,
+            filters=filters.ChatType.PRIVATE
+        )
+    )
+    app.add_handler(
+        CommandHandler(
+            "myid",
+            myid,
+            filters=filters.ChatType.PRIVATE
+        )
+    )
+    app.add_handler(
+        CommandHandler(
+            "getlink",
+            getlink,
+            filters=filters.ChatType.PRIVATE
+        )
+    )
+    app.add_handler(
+        CommandHandler(
+            "getid",
+            getid,
+            filters=filters.ChatType.PRIVATE
+        )
+    )
+
+    app.add_handler(
+        MessageHandler(
+            filters.TEXT & filters.ChatType.PRIVATE,
+            echo
+        )
+    )
 
     print("Bot is running...")
     threading.Thread(target=run_http_server, daemon=True).start()
