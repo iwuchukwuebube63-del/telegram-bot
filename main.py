@@ -2,27 +2,26 @@ import os
 import json
 import random
 import threading
+from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from http.server import HTTPServer, BaseHTTPRequestHandler
 
-from telegram.ext import filters
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
     MessageHandler,
-    filters,
     ContextTypes,
+    filters,
 )
 
-# ------------- Configuration -------------
+# ─── Configuration ──────────────────────────────────────────────────────────────
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-GROUP_ID = int(os.getenv("TELEGRAM_GROUP_ID"))      # e.g. -1001234567890
-ADMIN_ID = 7592357527                               # your Telegram ID
-ADMIN_USERNAME = "Danzy_101"                        # without the "@"
+GROUP_ID = int(os.getenv("TELEGRAM_GROUP_ID"))
+ADMIN_ID = 7592357527
+ADMIN_USERNAME = "Danzy_101"
 DATA_FILE = "activated_users.json"
 
-# ------------- Persistence Helpers -------------
+# ─── Persistence ────────────────────────────────────────────────────────────────
 def load_activated_users():
     try:
         with open(DATA_FILE, "r") as f:
@@ -37,19 +36,18 @@ def save_activated_users(users):
 activated_users = load_activated_users()
 valid_codes = set()
 
-# ------------- Utility Functions -------------
+# ─── Utility ────────────────────────────────────────────────────────────────────
 def is_admin(user):
     return (
         user.id == ADMIN_ID
         or (user.username and user.username.lower() == ADMIN_USERNAME.lower())
     )
 
-# ------------- Command Handlers -------------
-from datetime import datetime, timedelta
-
+# ─── Command Handlers ───────────────────────────────────────────────────────────
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    print(f"[DEBUG] /start called by {user.id}")
+    if update.effective_chat.type != "private":
+        return
 
     if user.id in activated_users:
         expire_time = datetime.utcnow() + timedelta(seconds=10)
@@ -63,7 +61,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"✅ You’re already activated!\n🔗 One-time link (valid for 10 seconds):\n{link.invite_link}"
             )
         except Exception as e:
-            print(f"[ERROR] /start link failed for {user.id}: {e}")
             await update.message.reply_text(f"❌ Failed to generate link: {e}")
     else:
         await update.message.reply_text(
@@ -72,6 +69,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
+    if update.effective_chat.type != "private":
+        return
+
     if user.id in activated_users:
         text = (
             "🛠 Commands for activated users:\n"
@@ -93,12 +93,35 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(text)
 
 async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat.type != "private":
+        return
+    user_id = update.effective_user.id
+    await update.message.reply_text(f"🆔 Your user ID is: {user_id}")
+
+async def getlink(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat.type != "private":
+        return
     user = update.effective_user
-    await update.message.reply_text(f"🆔 Your user ID is {user.id}")
+    if user.id not in activated_users:
+        return await update.message.reply_text("❌ You’re not activated. Use /start first.")
+
+    expire_time = datetime.utcnow() + timedelta(seconds=10)
+    try:
+        link = await context.bot.create_chat_invite_link(
+            chat_id=GROUP_ID,
+            member_limit=1,
+            expire_date=expire_time
+        )
+        await update.message.reply_text(
+            f"🔗 Your one-time link (valid for 10 seconds):\n{link.invite_link}"
+        )
+    except Exception as e:
+        await update.message.reply_text(f"❌ Failed to generate link: {e}")
 
 async def generate_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat.type != "private":
+        return
     user = update.effective_user
-    print(f"[DEBUG] /generate called by {user.id} (@{user.username})")
     if not is_admin(user):
         return await update.message.reply_text("❌ You’re not authorized.")
     code = str(random.randint(100000, 999999))
@@ -106,11 +129,11 @@ async def generate_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"✅ Your activation code is: {code}")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat.type != "private":
+        return
     user = update.effective_user
     text = update.message.text.strip()
-    print(f"[DEBUG] handle_message from {user.id}: “{text}”")
 
-    # If already activated, give a fresh one-time link
     if user.id in activated_users:
         expire_time = datetime.utcnow() + timedelta(seconds=10)
         link = await context.bot.create_chat_invite_link(
@@ -122,7 +145,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🔗 You're already activated!\nOne-time link (valid 10s):\n{link.invite_link}"
         )
 
-    # If the message is a valid activation code
     if text in valid_codes:
         valid_codes.remove(text)
         activated_users.add(user.id)
@@ -139,29 +161,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🎉 Here's your one-time group link (valid 10s):\n{link.invite_link}"
         )
 
-    # If none of the above, reject the message
     await update.message.reply_text("❌ Invalid code. Please ask the admin for a valid one.")
-async def getlink(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    print(f"[DEBUG] /getlink called by {user.id}")
 
-    if user.id not in activated_users:
-        return await update.message.reply_text("❌ You’re not activated. Use /start first.")
-
-    expire_time = datetime.utcnow() + timedelta(seconds=10)
-    try:
-        link = await context.bot.create_chat_invite_link(
-            chat_id=GROUP_ID,
-            member_limit=1,
-            expire_date=expire_time
-        )
-        await update.message.reply_text(
-            f"🔗 Your one-time link (valid for 10 seconds):\n{link.invite_link}"
-        )
-    except Exception as e:
-        print(f"[ERROR] getlink failed for {user.id}: {e}")
-        await update.message.reply_text(f"❌ Failed to generate link: {e}")
 async def list_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat.type != "private":
+        return
     user = update.effective_user
     if not is_admin(user):
         return await update.message.reply_text("❌ You’re not authorized.")
@@ -172,6 +176,8 @@ async def list_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("\n".join(lines))
 
 async def revoke_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat.type != "private":
+        return
     user = update.effective_user
     if not is_admin(user):
         return await update.message.reply_text("❌ You’re not authorized.")
@@ -189,6 +195,8 @@ async def revoke_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ That user is not activated.")
 
 async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_chat.type != "private":
+        return
     user = update.effective_user
     if not is_admin(user):
         return await update.message.reply_text("❌ You’re not authorized.")
@@ -201,84 +209,4 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_message(chat_id=uid, text=f"📢 Broadcast:\n{message}")
         except:
             failures.append(uid)
-    sent = len(activated_users) - len(failures)
-    summary = f"✅ Broadcast sent to {sent} user(s)."
-    if failures:
-        summary += "\n⚠️ Failed to send to: " + ", ".join(str(x) for x in failures)
-    await update.message.reply_text(summary)
-
-# ------------- Dummy HTTP Server for Render -------------
-class DummyHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"Bot is running.")
-
-def run_dummy_server():
-    port = int(os.getenv("PORT", 10000))
-    HTTPServer(("0.0.0.0", port), DummyHandler).serve_forever()
-
-threading.Thread(target=run_dummy_server, daemon=True).start()
-
-# ------------- Bot Startup -------------
-class HealthHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        if self.path in ("/", "/health"):
-            self.send_response(200)
-            self.send_header("Content-Type", "text/plain")
-            self.end_headers()
-            self.wfile.write(b"OK")
-        else:
-            self.send_error(404)
-
-def run_http_server():
-    port = int(os.getenv("PORT", "8443"))
-    server = HTTPServer(("0.0.0.0", port), HealthHandler)
-    print(f"Health check listening on 0.0.0.0:{port}")
-    server.serve_forever()
-
-# in __main__ before app.run_polling():
-threading.Thread(target=run_http_server, daemon=True).start()
-
-if __name__ == "__main__":
-    app = ApplicationBuilder().token(TOKEN).build()
-
-    app.add_handler(
-        CommandHandler(
-            "start",
-            start,
-            filters=filters.ChatType.PRIVATE
-        )
-    )
-    app.add_handler(
-        CommandHandler(
-            "help",
-            help_command,
-            filters=filters.ChatType.PRIVATE
-        )
-    )
-    app.add_handler(
-        CommandHandler(
-            "myid",
-            myid,
-            filters=filters.ChatType.PRIVATE
-        )
-    )
-    app.add_handler(
-        CommandHandler(
-            "getlink",
-            getlink,
-            filters=filters.ChatType.PRIVATE
-        )
-    )
-
-    app.add_handler(
-        MessageHandler(
-            filters.TEXT & filters.ChatType.PRIVATE,
-            echo
-        )
-    )
-
-    print("Bot is running...")
-    threading.Thread(target=run_http_server, daemon=True).start()
-    app.run_polling()
+    sent = len(activated_users) -[43dcd9a7-70db-4a1f-b0ae-981daa162054](https://github.com/Yeroc64444331123699963/yeroc_pcjs/tree/8490a15879d3ac82e08fcd067676e3941f322d5d/documents%2Fbooks%2Fmspl13%2Fmsdos%2Fencyclopedia%2Fappendix-a%2Findex.md?citationMarker=43dcd9a7-70db-4a1f-b0ae-981daa162054 "1")[43dcd9a7-70db-4a1f-b0ae-981daa162054](https://github.com/ngtaloc/TotNghiep-Project/tree/8b72be93496d37f227ac7d87d5aae25d5241d519/WebEng%2FWebEng%2FContent%2FTemplate%2Fplugins%2Fraphael%2Fraphael.js?citationMarker=43dcd9a7-70db-4a1f-b0ae-981daa162054 "2")[43dcd9a7-70db-4a1f-b0ae-981daa162054](https://github.com/aurelien-castel/DUT-Oct-2019-API-IA/tree/50bdb4267f4678a77435b151d3bae2e1a1aa1903/projet%2Fagents%2Foptimisation_MinMax%2Ftree%2Fminimax_tree.py?citationMarker=43dcd9a7-70db-4a1f-b0ae-981daa162054 "3")[43dcd9a7-70db-4a1f-b0ae-981daa162054](https://github.com/sensu/sensu-docs/tree/3f9b0c72df4d494de6cf04803ec229e3a89c6ec3/content%2Fsensu-go%2F6.5%2Fobservability-pipeline%2Fobserve-entities%2Fmonitor-external-resources.md?citationMarker=43dcd9a7-70db-4a1f-b0ae-981daa162054 "4")
