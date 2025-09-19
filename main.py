@@ -1,44 +1,48 @@
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
-import random, string
 
-ADMIN_ID = 7592357527
-one_time_codes = set()
-authorized_users = set()
+# Replace this with your actual bot token
+import os
+TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
-async def generate_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id != ADMIN_ID:
-        await update.message.reply_text("⛔ You're not authorized to generate codes.")
-        return
+# Your admin username and group link
+ADMIN_USERNAME = "@Danzy_101"
+GROUP_LINK = "https://t.me/+gMeI-26g9bNkNzI0"
 
-    new_code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
-    one_time_codes.add(new_code)
-    await update.message.reply_text(f"🔑 New one-time code: {new_code}")
+# Store activated users (in memory)
+activated_users = set()
+
+# Dummy activation codes (you can replace this with a real system)
+valid_codes = {"123456", "654321", "botaccess"}
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id in authorized_users:
-        await update.message.reply_text("✅ You're already activated.")
-    else:
-        await update.message.reply_text("🔐 Please enter your one-time access code:")
+    user = update.effective_user
+    await update.message.reply_text(
+        f"👋 Welcome, {user.first_name}!\n\nTo activate this bot, please get your one-time code from the admin: {ADMIN_USERNAME}\nOnce you have it, send it here to continue."
+    )
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
+    user = update.effective_user
+    user_id = user.id
     text = update.message.text.strip()
 
-    if user_id in authorized_users:
-        await update.message.reply_text(f"You said: {text}")
-    elif text in one_time_codes:
-        authorized_users.add(user_id)
-        one_time_codes.remove(text)
-        await update.message.reply_text("✅ Activation successful! You can now use the bot.")
+    if user_id in activated_users:
+        await update.message.reply_text("✅ You're already activated.")
+        return
+
+    if text in valid_codes:
+        activated_users.add(user_id)
+        await update.message.reply_text(
+            f"✅ Activation successful!\nYou're now verified to use this bot.\n\n🎉 Join our group here: {GROUP_LINK}"
+        )
     else:
-        await update.message.reply_text("❌ Invalid or already used code.")
+        await update.message.reply_text("❌ Invalid activation code. Please contact the admin for a valid one.")
 
 if __name__ == "__main__":
-    app = ApplicationBuilder().token("8403474618:AAFwBgzW1ZXx9NTQlF5g0s8VEzPHv1aXzyQ").build()
+    app = ApplicationBuilder().token(TOKEN).build()
+
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("generate", generate_code))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+    print("Bot is running...")
     app.run_polling()
