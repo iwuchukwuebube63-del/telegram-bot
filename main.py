@@ -118,15 +118,28 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("❌ Invalid code. Please ask the admin for a valid one.")
 
+from datetime import datetime, timedelta
+
 async def getlink(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
+    print(f"[DEBUG] /getlink called by {user.id}")
+
     if user.id not in activated_users:
         return await update.message.reply_text("❌ You’re not activated. Use /start first.")
-    link = await context.bot.create_chat_invite_link(
-        chat_id=GROUP_ID, member_limit=1
-    )
-    await update.message.reply_text(f"🔗 Your one-time link:\n{link.invite_link}")
 
+    expire_time = datetime.utcnow() + timedelta(seconds=10)
+    try:
+        link = await context.bot.create_chat_invite_link(
+            chat_id=GROUP_ID,
+            member_limit=1,
+            expire_date=expire_time
+        )
+        await update.message.reply_text(
+            f"🔗 Your one-time link (valid for 10 seconds):\n{link.invite_link}"
+        )
+    except Exception as e:
+        print(f"[ERROR] getlink failed for {user.id}: {e}")
+        await update.message.reply_text(f"❌ Failed to generate link: {e}")
 async def list_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     if not is_admin(user):
