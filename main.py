@@ -116,16 +116,26 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     if text in valid_codes:
-        valid_codes.remove(text)
-        activated_users.add(user.id)
-        save_activated_users(activated_users)
+    valid_codes.remove(text)
+    activated_users.add(user.id)
+    save_activated_users(activated_users)
+
+    # expire in 10 seconds
+    expire_time = datetime.utcnow() + timedelta(seconds=10)
+    try:
         link = await context.bot.create_chat_invite_link(
-            chat_id=GROUP_ID, member_limit=1
+            chat_id=GROUP_ID,
+            member_limit=1,
+            expire_date=expire_time
         )
-        return await update.message.reply_text(
+        await update.message.reply_text(
             "✅ Activation successful!\n"
-            f"🎉 Here’s your one-time group link:\n{link.invite_link}"
+            f"🎉 Here’s your one-time group link (valid 10s):\n{link.invite_link}"
         )
+    except Exception as e:
+        print(f"[ERROR] activation link failed for {user.id}: {e}")
+        await update.message.reply_text(f"❌ Activation OK, but failed to generate link: {e}")
+    return
 
     await update.message.reply_text("❌ Invalid code. Please ask the admin for a valid one.")
 
