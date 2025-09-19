@@ -3,6 +3,7 @@ import json
 import random
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import HTTPServer, BaseHTTPRequestHandler
 
 from telegram import Update
 from telegram.ext import (
@@ -219,6 +220,25 @@ def run_dummy_server():
 threading.Thread(target=run_dummy_server, daemon=True).start()
 
 # ------------- Bot Startup -------------
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path in ("/", "/health"):
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.end_headers()
+            self.wfile.write(b"OK")
+        else:
+            self.send_error(404)
+
+def run_http_server():
+    port = int(os.getenv("PORT", "8443"))
+    server = HTTPServer(("0.0.0.0", port), HealthHandler)
+    print(f"Health check listening on 0.0.0.0:{port}")
+    server.serve_forever()
+
+# in __main__ before app.run_polling():
+threading.Thread(target=run_http_server, daemon=True).start()
+
 if __name__ == "__main__":
     app = ApplicationBuilder().token(TOKEN).build()
 
@@ -233,4 +253,5 @@ if __name__ == "__main__":
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     print("Bot is running...")
+threading.Thread(target=run_http_server, daemon=True).start()
     app.run_polling()
