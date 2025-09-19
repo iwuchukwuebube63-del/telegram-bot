@@ -55,22 +55,22 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if user.id in activated_users:
         help_text = (
             "🛠️ *Available Commands for Activated Users:*\n\n"
-            "/start – Check your activation status\n"
-            "/help – Show this help message\n"
-            "/generate – (Admin only) Create a one-time activation code\n"
-            "/list_users – (Admin only) View activated users\n"
-            "/revoke <user_id> – (Admin only) Revoke a user's access\n"
-            "/broadcast <message> – (Admin only) Send a message to all activated users\n"
+            "/start \\- Check your activation status\n"
+            "/help \\- Show this help message\n"
+            "/generate \\- \\(Admin only\\) Create a one\\-time activation code\n"
+            "/list_users \\- \\(Admin only\\) View activated users\n"
+            "/revoke \\- \\(Admin only\\) Revoke a user's access\n"
+            "/broadcast \\- \\(Admin only\\) Send a message to all activated users"
         )
     else:
         help_text = (
-            "👋 *Welcome to the Bot!*\n\n"
+            "👋 *Welcome to the Bot!* \n\n"
             "You need to be activated to use commands.\n"
             f"Get your one-time code from the admin: {ADMIN_USERNAME}\n"
             "Send the code here to unlock access.\n\n"
             "After activation, use /help to see all commands."
         )
-    await update.message.reply_text(help_text, parse_mode="Markdown")
+    await update.message.reply_text(help_text, parse_mode="MarkdownV2")
 
 async def generate_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -115,8 +115,10 @@ async def list_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("No users have been activated yet.")
         return
 
-    users_list = "\n".join(str(uid) for uid in activated_users)
-    await update.message.reply_text(f"🧑‍💻 Activated Users:\n{users_list}")
+    lines = [f"🧑‍💻 Activated Users ({len(activated_users)}):"]
+    for uid in activated_users:
+        lines.append(f"– {uid}")
+    await update.message.reply_text("\n".join(lines))
 
 async def revoke_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -152,16 +154,17 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Usage: /broadcast <message>")
         return
 
-    failed = []
+    failures = []
     for uid in activated_users:
         try:
             await context.bot.send_message(chat_id=uid, text=f"📢 Broadcast:\n{message}")
         except:
-            failed.append(uid)
+            failures.append(uid)
 
-    summary = f"✅ Broadcast sent to {len(activated_users) - len(failed)} users."
-    if failed:
-        summary += f"\n⚠️ Failed for: {', '.join(str(x) for x in failed)}"
+    sent = len(activated_users) - len(failures)
+    summary = f"✅ Broadcast sent to {sent} user(s)."
+    if failures:
+        summary += "\n⚠️ Failed to send to: " + ", ".join(str(x) for x in failures)
     await update.message.reply_text(summary)
 
 # ------------- Dummy HTTP Server for Render -------------
@@ -182,15 +185,16 @@ threading.Thread(target=run_dummy_server, daemon=True).start()
 if __name__ == "__main__":
     app = ApplicationBuilder().token(TOKEN).build()
 
-    # Register command handlers
+    # Register handlers
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("generate", generate_code))
     app.add_handler(CommandHandler("list_users", list_users))
     app.add_handler(CommandHandler("revoke", revoke_user))
     app.add_handler(CommandHandler("broadcast", broadcast))
-    # Handle all non-command text for activation
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     print("Bot is running...")
     app.run_polling()
+
+
