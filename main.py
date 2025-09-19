@@ -209,4 +209,27 @@ async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_message(chat_id=uid, text=f"📢 Broadcast:\n{message}")
         except:
             failures.append(uid)
-    sent = len(activated_users) -[43dcd9a7-70db-4a1f-b0ae-981daa162054](https://github.com/Yeroc64444331123699963/yeroc_pcjs/tree/8490a15879d3ac82e08fcd067676e3941f322d5d/documents%2Fbooks%2Fmspl13%2Fmsdos%2Fencyclopedia%2Fappendix-a%2Findex.md?citationMarker=43dcd9a7-70db-4a1f-b0ae-981daa162054 "1")[43dcd9a7-70db-4a1f-b0ae-981daa162054](https://github.com/ngtaloc/TotNghiep-Project/tree/8b72be93496d37f227ac7d87d5aae25d5241d519/WebEng%2FWebEng%2FContent%2FTemplate%2Fplugins%2Fraphael%2Fraphael.js?citationMarker=43dcd9a7-70db-4a1f-b0ae-981daa162054 "2")[43dcd9a7-70db-4a1f-b0ae-981daa162054](https://github.com/aurelien-castel/DUT-Oct-2019-API-IA/tree/50bdb4267f4678a77435b151d3bae2e1a1aa1903/projet%2Fagents%2Foptimisation_MinMax%2Ftree%2Fminimax_tree.py?citationMarker=43dcd9a7-70db-4a1f-b0ae-981daa162054 "3")[43dcd9a7-70db-4a1f-b0ae-981daa162054](https://github.com/sensu/sensu-docs/tree/3f9b0c72df4d494de6cf04803ec229e3a89c6ec3/content%2Fsensu-go%2F6.5%2Fobservability-pipeline%2Fobserve-entities%2Fmonitor-external-resources.md?citationMarker=43dcd9a7-70db-4a1f-b0ae-981daa162054 "4")
+    sent = len(activated_users) - len(failures)
+    summary = f"✅ Broadcast sent to {sent} user(s)."
+    if failures:
+        summary += "\n⚠️ Failed to send to: " + ", ".join(str(x) for x in failures)
+    await update.message.reply_text(summary)
+    summary = f"✅ Broadcast sent to {sent} user(s)."
+
+if __name__ == "__main__":
+    app = ApplicationBuilder().token(TOKEN).build()
+
+    private = filters.ChatType.PRIVATE
+
+    app.add_handler(CommandHandler("start", start, filters=private))
+    app.add_handler(CommandHandler("help", help_command, filters=private))
+    app.add_handler(CommandHandler("myid", myid, filters=private))
+    app.add_handler(CommandHandler("getlink", getlink, filters=private))
+    app.add_handler(CommandHandler("generate", generate_code, filters=private))
+    app.add_handler(CommandHandler("list_users", list_users, filters=private))
+    app.add_handler(CommandHandler("revoke", revoke_user, filters=private))
+    app.add_handler(CommandHandler("broadcast", broadcast, filters=private))
+    app.add_handler(MessageHandler(filters.TEXT & private, handle_message))
+
+    print("✅ Bot is running…")
+    app.run_polling()
