@@ -106,41 +106,39 @@ async def generate_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     text = update.message.text.strip()
+    print(f"[DEBUG] handle_message from {user.id}: “{text}”")
 
+    # If already activated, give a fresh one-time link
     if user.id in activated_users:
-        link = await context.bot.create_chat_invite_link(
-            chat_id=GROUP_ID, member_limit=1
-        )
-        return await update.message.reply_text(
-            f"✅ Here’s a fresh one-time link:\n{link.invite_link}"
-        )
-
-    if text in valid_codes:
-    valid_codes.remove(text)
-    activated_users.add(user.id)
-    save_activated_users(activated_users)
-
-    # expire in 10 seconds
-    expire_time = datetime.utcnow() + timedelta(seconds=10)
-    try:
+        expire_time = datetime.utcnow() + timedelta(seconds=10)
         link = await context.bot.create_chat_invite_link(
             chat_id=GROUP_ID,
             member_limit=1,
             expire_date=expire_time
         )
-        await update.message.reply_text(
-            "✅ Activation successful!\n"
-            f"🎉 Here’s your one-time group link (valid 10s):\n{link.invite_link}"
+        return await update.message.reply_text(
+            f"🔗 You're already activated!\nOne-time link (valid 10s):\n{link.invite_link}"
         )
-    except Exception as e:
-        print(f"[ERROR] activation link failed for {user.id}: {e}")
-        await update.message.reply_text(f"❌ Activation OK, but failed to generate link: {e}")
-    return
 
+    # If the message is a valid activation code
+    if text in valid_codes:
+        valid_codes.remove(text)
+        activated_users.add(user.id)
+        save_activated_users(activated_users)
+
+        expire_time = datetime.utcnow() + timedelta(seconds=10)
+        link = await context.bot.create_chat_invite_link(
+            chat_id=GROUP_ID,
+            member_limit=1,
+            expire_date=expire_time
+        )
+        return await update.message.reply_text(
+            "✅ Activation successful!\n"
+            f"🎉 Here's your one-time group link (valid 10s):\n{link.invite_link}"
+        )
+
+    # If none of the above, reject the message
     await update.message.reply_text("❌ Invalid code. Please ask the admin for a valid one.")
-
-from datetime import datetime, timedelta
-
 async def getlink(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     print(f"[DEBUG] /getlink called by {user.id}")
