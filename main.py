@@ -1,3 +1,9 @@
+import os
+import json
+import random
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
 from telegram import Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -6,98 +12,159 @@ from telegram.ext import (
     filters,
     ContextTypes,
 )
-import os
-import random
 
-# Bot token from environment variable
+# ------------- Configuration -------------
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-
-# Admin info
 ADMIN_ID = 7592357527
 ADMIN_USERNAME = "@Danzy_101"
 GROUP_LINK = "https://t.me/+gMeI-26g9bNkNzI0"
+ACTIVATED_FILE = "activated_users.json"
 
-# In-memory storage
+# ------------- Persistence Helpers -------------
+def load_activated_users():
+    try:
+        with open(ACTIVATED_FILE, "r") as f:
+            return set(json.load(f))
+    except (FileNotFoundError, json.JSONDecodeError):
+        return set()
+
+def save_activated_users(users):
+    with open(ACTIVATED_FILE, "w") as f:
+        json.dump(list(users), f)
+
+# ------------- In-Memory State -------------
 valid_codes = set()
-activated_users = set()
+activated_users = load_activated_users()
 
-
+# ------------- Command Handlers -------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    user_id = user.id
-
-    if user_id in activated_users:
-        # Already activated: remind them of the group link
-        return await update.message.reply_text(
+    if user.id in activated_users:
+        await update.message.reply_text(
             f"✅ You’re already activated.\n\n🎉 Join our group here: {GROUP_LINK}"
         )
+    else:
+        await update.message.reply_text(
+            f"👋 Hello, {user.first_name}!\n"
+            f"To use this bot, get your one-time activation code from the admin: {ADMIN_USERNAME}\n"
+            "Then send it here to activate."
+        )
 
-    # Not yet activated: prompt for code
-    await update.message.reply_text(
-        f"👋 Hi, {user.first_name}!\n"
-        f"To activate this bot, please get your one-time code from the admin: {ADMIN_USERNAME}\n"
-        "Once you have it, send it here to continue."
-    )
-
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    if user.id in activated_users:
+        help_text = (
+            "🛠️ *Available Commands for Activated Users:*\n\n"
+            "/start – Check your activation status\n"
+            "/help – Show this help message\n"
+            "/generate – (Admin only) Create a one-time activation code\n"
+            "/list_users – (Admin only) View activated users\n"
+            "/revoke <user_id> – (Admin only) Revoke a user's access\n"
+            "/broadcast <message> – (Admin only) Send a message to all activated users\n"
+        )
+    else:
+        help_text = (
+            "👋 *Welcome to the Bot!*\n\n"
+            "You need to be activated to use commands.\n"
+            f"Get your one-time code from the admin: {ADMIN_USERNAME}\n"
+            "Send the code here to unlock access.\n\n"
+            "After activation, use /help to see all commands."
+        )
+    await update.message.reply_text(help_text, parse_mode="Markdown")
 
 async def generate_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-
     if user.id != ADMIN_ID:
-        return await update.message.reply_text("❌ You’re not authorized to generate codes.")
+        await update.message.reply_text("❌ You’re not authorized to generate codes.")
+        return
 
-    # Create and store a six-digit code
     code = str(random.randint(100000, 999999))
     valid_codes.add(code)
-
     await update.message.reply_text(f"✅ Your one-time activation code is: {code}")
-
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    user_id = user.id
     text = update.message.text.strip()
 
-    # If they’re already activated, remind them and stop
-    if user_id in activated_users:
-        return await update.message.reply_text(
+    if user.id in activated_users:
+        await update.message.reply_text(
             f"✅ You’re already activated.\n\n🎉 Join our group here: {GROUP_LINK}"
         )
+        return
 
-    # Check the code
     if text in valid_codes:
-        # One-time use: remove it immediately
         valid_codes.remove(text)
-        activated_users.add(user_id)
-
-        return await update.message.reply_text(
+        activated_users.add(user.id)
+        save_activated_users(activated_users)
+        await update.message.reply_text(
             "✅ Activation successful!\n"
-            "You’re now verified to use this bot.\n\n"
             f"🎉 Join our group here: {GROUP_LINK}"
         )
+    else:
+        await update.message.reply_text(
+            "❌ Invalid code. Please contact the admin for a valid activation code."
+        )
 
-    # Invalid code
-    await update.message.reply_text(
-        "❌ Invalid activation code.\n"
-        "Please contact the admin for a valid one."
-    )
+async def list_users(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    if user.id != ADMIN_ID:
+        await update.message.reply_text("❌ You’re not authorized to view users.")
+        return
 
+    if not activated_users:
+        await update.message.reply_text("No users have been activated yet.")
+        return
 
-if __name__ == "__main__":
-    app = ApplicationBuilder().token(TOKEN).build()
+    users_list = "\n".join(str(uid) for uid in activated_users)
+    await update.message.reply_text(f"🧑‍💻 Activated Users:\n{users_list}")
 
-    # Command handlers
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("generate", generate_code))
+async def revoke_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    if user.id != ADMIN_ID:
+        await update.message.reply_text("❌ You’re not authorized to revoke users.")
+        return
 
-    # All text messages go here
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+    if not context.args:
+        await update.message.reply_text("Usage: /revoke <user_id>")
+        return
 
-    print("Bot is running...")
-    app.run_polling()
-import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
+    try:
+        target = int(context.args[0])
+    except ValueError:
+        await update.message.reply_text("❌ Invalid user ID format.")
+        return
 
+    if target in activated_users:
+        activated_users.remove(target)
+        save_activated_users(activated_users)
+        await update.message.reply_text(f"✅ Revoked access for user {target}.")
+    else:
+        await update.message.reply_text("❌ That user is not activated.")
+
+async def broadcast(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    if user.id != ADMIN_ID:
+        await update.message.reply_text("❌ You’re not authorized to broadcast.")
+        return
+
+    message = " ".join(context.args).strip()
+    if not message:
+        await update.message.reply_text("Usage: /broadcast <message>")
+        return
+
+    failed = []
+    for uid in activated_users:
+        try:
+            await context.bot.send_message(chat_id=uid, text=f"📢 Broadcast:\n{message}")
+        except:
+            failed.append(uid)
+
+    summary = f"✅ Broadcast sent to {len(activated_users) - len(failed)} users."
+    if failed:
+        summary += f"\n⚠️ Failed for: {', '.join(str(x) for x in failed)}"
+    await update.message.reply_text(summary)
+
+# ------------- Dummy HTTP Server for Render -------------
 class DummyHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -109,5 +176,21 @@ def run_dummy_server():
     server = HTTPServer(("0.0.0.0", port), DummyHandler)
     server.serve_forever()
 
-# Start dummy server in background
 threading.Thread(target=run_dummy_server, daemon=True).start()
+
+# ------------- Bot Startup -------------
+if __name__ == "__main__":
+    app = ApplicationBuilder().token(TOKEN).build()
+
+    # Register command handlers
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("generate", generate_code))
+    app.add_handler(CommandHandler("list_users", list_users))
+    app.add_handler(CommandHandler("revoke", revoke_user))
+    app.add_handler(CommandHandler("broadcast", broadcast))
+    # Handle all non-command text for activation
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+
+    print("Bot is running...")
+    app.run_polling()
