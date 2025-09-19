@@ -43,15 +43,26 @@ def is_admin(user):
     )
 
 # ------------- Command Handlers -------------
+from datetime import datetime, timedelta
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
+    print(f"[DEBUG] /start called by {user.id}")
+
     if user.id in activated_users:
-        link = await context.bot.create_chat_invite_link(
-            chat_id=GROUP_ID, member_limit=1
-        )
-        await update.message.reply_text(
-            f"✅ You’re already activated! Here’s your one-time group link:\n{link.invite_link}"
-        )
+        expire_time = datetime.utcnow() + timedelta(seconds=10)
+        try:
+            link = await context.bot.create_chat_invite_link(
+                chat_id=GROUP_ID,
+                member_limit=1,
+                expire_date=expire_time
+            )
+            await update.message.reply_text(
+                f"✅ You’re already activated!\n🔗 One-time link (valid for 10 seconds):\n{link.invite_link}"
+            )
+        except Exception as e:
+            print(f"[ERROR] /start link failed for {user.id}: {e}")
+            await update.message.reply_text(f"❌ Failed to generate link: {e}")
     else:
         await update.message.reply_text(
             f"👋 Hi {user.first_name}! Ask @{ADMIN_USERNAME} for an activation code, then send it here."
